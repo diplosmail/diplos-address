@@ -1,6 +1,7 @@
 export interface MelissaResult {
   is_verified: boolean;
   is_deliverable: boolean;
+  address_type: string;
   result_codes: string;
   formatted_address: {
     street_address: string;
@@ -24,6 +25,7 @@ export async function verifyAddress(
     return {
       is_verified: false,
       is_deliverable: false,
+      address_type: '',
       result_codes: 'NO_API_KEY',
       formatted_address: null,
       raw_response: { error: 'MELISSA_API_KEY not configured' },
@@ -51,6 +53,7 @@ export async function verifyAddress(
       return {
         is_verified: false,
         is_deliverable: false,
+        address_type: '',
         result_codes: `HTTP_${res.status}`,
         formatted_address: null,
         raw_response: { status: res.status },
@@ -64,6 +67,7 @@ export async function verifyAddress(
       return {
         is_verified: false,
         is_deliverable: false,
+        address_type: '',
         result_codes: 'NO_RECORD',
         formatted_address: null,
         raw_response: data,
@@ -71,12 +75,19 @@ export async function verifyAddress(
     }
 
     const resultCodes = record.Results || '';
-    const isVerified = resultCodes.includes('AV');
-    const isDeliverable = isVerified && !resultCodes.includes('AE');
+    const addressType = record.AddressType || '';
+
+    // AS01 = Address fully verified to the street level
+    const isVerified = resultCodes.includes('AS01');
+
+    // Deliverable = verified AND not a PO Box (P) or Residential (R)
+    // P = PO Box, R = Residential, S = Street/Commercial (deliverable)
+    const isDeliverable = isVerified && addressType !== 'P' && addressType !== 'R';
 
     return {
       is_verified: isVerified,
       is_deliverable: isDeliverable,
+      address_type: addressType,
       result_codes: resultCodes,
       formatted_address: isVerified
         ? {
@@ -94,6 +105,7 @@ export async function verifyAddress(
     return {
       is_verified: false,
       is_deliverable: false,
+      address_type: '',
       result_codes: 'ERROR',
       formatted_address: null,
       raw_response: { error: message },

@@ -139,7 +139,7 @@ export async function POST(
     const finalAddress = melissa.formatted_address || addressData;
 
     // Save address record
-    await supabase.from('addresses').insert({
+    const { error: insertError } = await supabase.from('addresses').insert({
       contact_id: contact.id,
       street_address: finalAddress.street_address,
       street_address_2: finalAddress.street_address_2,
@@ -151,8 +151,16 @@ export async function POST(
       source_url: addressData.source_url,
       is_verified: melissa.is_verified,
       is_deliverable: melissa.is_deliverable,
-      melissa_result: melissa.raw_response,
+      melissa_result: {
+        ...melissa.raw_response,
+        _result_codes: melissa.result_codes,
+        _address_type: melissa.address_type,
+      },
     });
+
+    if (insertError) {
+      throw new Error(`Failed to save address: ${insertError.message}`);
+    }
 
     // Mark contact as complete
     await supabase
