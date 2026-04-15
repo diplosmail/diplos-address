@@ -10,8 +10,14 @@ export async function POST(
   const { id } = await params;
   const supabase = getSupabaseServerClient();
 
-  // Get next scraped contact (has address, needs verification)
-  const { data: contact, error: fetchError } = await supabase
+  // Get next contact that needs verification:
+  // - 'scraped' = new flow (address saved, not yet verified)
+  // - 'complete' with unverified address = old flow (needs Melissa run)
+  let contact;
+  let fetchError;
+
+  // First try contacts with 'scraped' status
+  const scraped = await supabase
     .from('contacts')
     .select('*, addresses(*)')
     .eq('campaign_id', id)
@@ -19,6 +25,29 @@ export async function POST(
     .order('created_at', { ascending: true })
     .limit(1)
     .single();
+
+  if (scraped.data) {
+    contact = scraped.data;
+    fetchError = scraped.error;
+  } else {
+    // Fall back to 'complete' contacts with unverified addresses
+    const unverified = await supabase
+      .from('contacts')
+      .select('*, addresses(*)')
+      .eq('campaign_id', id)
+      .eq('status', 'complete')
+      .order('created_at', { ascending: true });
+
+    const match = unverified.data?.find(
+      (c: Record<string, unknown>) => {
+        const addrs = c.addresses as { is_verified: boolean }[] | undefined;
+        return addrs?.[0] && !addrs[0].is_verified;
+      }
+    );
+
+    contact = match || null;
+    fetchError = match ? null : { message: 'none' };
+  }
 
   if (fetchError || !contact) {
     // No more scraped contacts to verify
@@ -112,6 +141,10 @@ export async function POST(
       done: false,
       contactName: `${contact.first_name} ${contact.last_name}`,
       processedCount: await getProcessedCount(supabase, id),
+      melissaResult: melissa.result_codes,
+      addressType: melissa.address_type,
+      verified: melissa.is_verified,
+      deliverable: melissa.is_deliverable,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Verification failed';

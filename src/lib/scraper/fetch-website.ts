@@ -72,36 +72,54 @@ async function fetchPage(url: string): Promise<{ html: string; ok: boolean }> {
   }
 }
 
+// High-priority patterns — these pages almost always have addresses
+const HIGH_PRIORITY_HREF = [/\/contact/i, /\/location/i, /\/office/i, /\/headquarter/i, /\/find-us/i, /\/directions/i];
+const HIGH_PRIORITY_TEXT = [/contact/i, /location/i, /office/i, /headquarter/i, /find.?us/i, /directions/i];
+
+// Lower priority — sometimes have addresses
+const LOW_PRIORITY_HREF = [/\/about/i, /\/company/i, /\/who-we-are/i, /\/our-story/i];
+const LOW_PRIORITY_TEXT = [/about/i, /visit/i, /where.?we.?are/i];
+
 function findContactLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
-  const found = new Set<string>();
+  const highPriority: string[] = [];
+  const lowPriority: string[] = [];
 
   $('a').each((_, el) => {
     const href = $(el).attr('href') || '';
     const text = $(el).text().toLowerCase().trim();
 
-    const textMatch = CONTACT_LINK_PATTERNS.some((p) => p.test(text));
-    const hrefMatch = CONTACT_HREF_PATTERNS.some((p) => p.test(href));
+    // Skip sub-pages that never have addresses (careers, mission, vision, etc.)
+    if (/career|job|mission|vision|value|team|affiliation|news|blog|press|faq|privacy|terms|login|sign/i.test(href)) return;
+    if (/career|job|mission|vision|value|team|affiliation|news|blog|press|faq|privacy|terms/i.test(text)) return;
 
-    if (textMatch || hrefMatch) {
+    const isHighText = HIGH_PRIORITY_TEXT.some((p) => p.test(text));
+    const isHighHref = HIGH_PRIORITY_HREF.some((p) => p.test(href));
+    const isLowText = LOW_PRIORITY_TEXT.some((p) => p.test(text));
+    const isLowHref = LOW_PRIORITY_HREF.some((p) => p.test(href));
+
+    if (isHighText || isHighHref || isLowText || isLowHref) {
       try {
         const resolved = new URL(href, baseUrl).href;
-        // Only follow links on the same domain
         if (new URL(resolved).hostname === new URL(baseUrl).hostname) {
-          found.add(resolved);
+          if (isHighText || isHighHref) {
+            if (!highPriority.includes(resolved)) highPriority.push(resolved);
+          } else {
+            if (!lowPriority.includes(resolved)) lowPriority.push(resolved);
+          }
         }
       } catch { /* skip */ }
     }
   });
 
-  return [...found];
+  // High priority first, then low priority
+  return [...highPriority, ...lowPriority];
 }
 
-// Common contact page URL slugs to try directly
+// Common contact page URL slugs to try directly (high priority first)
 const COMMON_CONTACT_SLUGS = [
-  '/contact', '/contact-us', '/contact-us-2', '/contact/',
-  '/about', '/about-us', '/about/',
-  '/locations', '/location', '/offices',
-  '/headquarters', '/our-locations',
+  '/contact', '/contact-us', '/contact-us-2',
+  '/locations', '/location', '/offices', '/headquarters',
+  '/about', '/about-us',
 ];
 
 export async function fetchWebsiteText(url: string): Promise<WebsiteContent> {
@@ -116,18 +134,19 @@ export async function fetchWebsiteText(url: string): Promise<WebsiteContent> {
     const homeText = extractPageText($home);
     const pages = [{ url, text: homeText }];
 
-    // Step 2: Find contact/about/location pages from links
+    // Step 2: Find contact/about/location pages from links (prioritized)
     const contactLinks = findContactLinks($home, url);
 
-    // Step 3: Also try common contact URL slugs directly
+    // Step 3: Also try common contact URL slugs (deduplicated)
     const baseOrigin = new URL(url).origin;
     for (const slug of COMMON_CONTACT_SLUGS) {
       const candidate = baseOrigin + slug;
-      if (!contactLinks.includes(candidate)) {
+      if (!contactLinks.includes(candidate) && !contactLinks.includes(candidate + '/')) {
         contactLinks.push(candidate);
       }
     }
 
+    // Fetch up to 5 subpages — contact/location pages come first
     const toFetch = contactLinks.slice(0, 5);
 
     const subpageResults = await Promise.all(
