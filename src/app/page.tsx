@@ -20,6 +20,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchCampaigns();
@@ -50,9 +52,13 @@ export default function DashboardPage() {
     }
   }
 
-  async function deleteCampaign(id: string) {
-    await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
-    setCampaigns(campaigns.filter((c) => c.id !== id));
+  async function deleteCampaign() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    await fetch(`/api/campaigns/${deleteTarget.id}`, { method: 'DELETE' });
+    setCampaigns(campaigns.filter((c) => c.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    setDeleting(false);
   }
 
   return (
@@ -132,7 +138,7 @@ export default function DashboardPage() {
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteCampaign(campaign.id);
+                    setDeleteTarget(campaign);
                   }}
                 >
                   Delete
@@ -140,6 +146,38 @@ export default function DashboardPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl border border-border shadow-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Delete Campaign</h3>
+            <p className="text-sm text-muted mb-1">
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+            </p>
+            <p className="text-sm text-danger mb-6">
+              This will permanently delete all {deleteTarget.total_contacts} contacts, scraped addresses, and verification results. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={deleteCampaign}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting...' : 'Delete Campaign'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
