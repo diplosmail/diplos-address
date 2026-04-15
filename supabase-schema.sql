@@ -15,6 +15,7 @@ create table campaigns (
 create table contacts (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references campaigns(id) on delete cascade,
+  crm_id text not null default '',
   first_name text not null default '',
   last_name text not null default '',
   company_name text not null default '',

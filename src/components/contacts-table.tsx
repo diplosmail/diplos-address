@@ -25,6 +25,7 @@ export function ContactsTable({ contacts }: ContactsTableProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left">
+            <th className="pb-3 font-medium text-muted">CRM ID</th>
             <th className="pb-3 font-medium text-muted">Name</th>
             <th className="pb-3 font-medium text-muted">Company</th>
             <th className="pb-3 font-medium text-muted">URL</th>
@@ -40,6 +41,9 @@ export function ContactsTable({ contacts }: ContactsTableProps) {
             const status = statusConfig[contact.status];
             return (
               <tr key={contact.id} className="border-b border-border/50">
+                <td className="py-3 pr-4 text-muted font-mono text-xs">
+                  {contact.crm_id}
+                </td>
                 <td className="py-3 pr-4">
                   {contact.first_name} {contact.last_name}
                 </td>

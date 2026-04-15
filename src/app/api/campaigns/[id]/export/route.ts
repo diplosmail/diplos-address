@@ -39,6 +39,7 @@ export async function GET(
   // Build header row: hard-coded columns + dynamic columns
   const hardCodedColumns = (settings || []).map((s) => s.column_name);
   const dynamicColumns = [
+    'CRM ID',
     'First Name',
     'Last Name',
     'Company Name',
@@ -72,6 +73,7 @@ export async function GET(
     const address = contact.addresses?.[0];
     const hardCodedValues = (settings || []).map((s) => s.default_value);
     const dynamicValues = [
+      contact.crm_id,
       contact.first_name,
       contact.last_name,
       contact.company_name,

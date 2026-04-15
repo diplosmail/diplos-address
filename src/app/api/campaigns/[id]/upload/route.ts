@@ -1,6 +1,33 @@
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import ExcelJS from 'exceljs';
 
+// Each required column has a list of patterns to match against (case-insensitive)
+const COLUMN_MATCHERS: Record<string, string[]> = {
+  crm_id: ['record id', 'record_id', 'recordid', 'crm id', 'crm_id', 'crmid', 'id', 'hubspot id', 'salesforce id', 'contact id'],
+  first_name: ['first name', 'first_name', 'firstname'],
+  last_name: ['last name', 'last_name', 'lastname'],
+  company_name: ['company name', 'company_name', 'companyname', 'company', 'associated company', 'associated company (primary)', 'organization', 'org'],
+  company_url: ['company url', 'company_url', 'companyurl', 'website url', 'website_url', 'websiteurl', 'website', 'url', 'domain', 'web'],
+};
+
+const REQUIRED_COLUMNS = ['crm_id', 'first_name', 'last_name', 'company_name', 'company_url'];
+
+const FRIENDLY_NAMES: Record<string, string> = {
+  crm_id: 'CRM ID (e.g. "Record ID")',
+  first_name: 'First Name',
+  last_name: 'Last Name',
+  company_name: 'Company Name (e.g. "Associated Company (Primary)")',
+  company_url: 'Website URL (e.g. "Website URL")',
+};
+
+function findColumn(headers: Record<string, number>, field: string): number | undefined {
+  const patterns = COLUMN_MATCHERS[field] || [];
+  for (const pattern of patterns) {
+    if (headers[pattern] !== undefined) return headers[pattern];
+  }
+  return undefined;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,13 +44,10 @@ export async function POST(
 
   try {
     const isCsv = file.name.toLowerCase().endsWith('.csv');
-    const contacts: {
-      campaign_id: string;
-      first_name: string;
-      last_name: string;
-      company_name: string;
-      company_url: string;
-    }[] = [];
+
+    // Parse headers based on file type
+    let headers: Record<string, number> = {};
+    let dataRows: { getCell: (col: number) => string }[] = [];
 
     if (isCsv) {
       const text = await file.text();
@@ -33,38 +57,13 @@ export async function POST(
         return Response.json({ error: 'CSV file is empty or has no data rows' }, { status: 400 });
       }
 
-      // Build header map
-      const headers: Record<string, number> = {};
       rows[0].forEach((val, i) => {
         headers[val.toLowerCase().trim()] = i;
       });
 
-      const firstNameCol = headers['first name'] ?? headers['first_name'] ?? headers['firstname'];
-      const lastNameCol = headers['last name'] ?? headers['last_name'] ?? headers['lastname'];
-      const companyCol = headers['company name'] ?? headers['company_name'] ?? headers['company'] ?? headers['companyname'];
-      const urlCol = headers['company url'] ?? headers['company_url'] ?? headers['url'] ?? headers['website'] ?? headers['companyurl'];
-
-      if (firstNameCol === undefined && lastNameCol === undefined && companyCol === undefined && urlCol === undefined) {
-        return Response.json({
-          error: 'Could not find expected columns. Please include: First Name, Last Name, Company Name, Company URL',
-        }, { status: 400 });
-      }
-
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const firstName = firstNameCol !== undefined ? (row[firstNameCol] ?? '').trim() : '';
-        const lastName = lastNameCol !== undefined ? (row[lastNameCol] ?? '').trim() : '';
-        const companyName = companyCol !== undefined ? (row[companyCol] ?? '').trim() : '';
-        let companyUrl = urlCol !== undefined ? (row[urlCol] ?? '').trim() : '';
-
-        if (!firstName && !lastName && !companyName && !companyUrl) continue;
-
-        if (companyUrl && !companyUrl.startsWith('http')) {
-          companyUrl = `https://${companyUrl}`;
-        }
-
-        contacts.push({ campaign_id: id, first_name: firstName, last_name: lastName, company_name: companyName, company_url: companyUrl });
-      }
+      dataRows = rows.slice(1).map((row) => ({
+        getCell: (col: number) => (row[col] ?? '').trim(),
+      }));
     } else {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = new ExcelJS.Workbook();
@@ -76,38 +75,79 @@ export async function POST(
       }
 
       const headerRow = worksheet.getRow(1);
-      const headers: Record<string, number> = {};
       headerRow.eachCell((cell, colNumber) => {
         const value = String(cell.value ?? '').toLowerCase().trim();
         headers[value] = colNumber;
       });
 
-      const firstNameCol = headers['first name'] ?? headers['first_name'] ?? headers['firstname'];
-      const lastNameCol = headers['last name'] ?? headers['last_name'] ?? headers['lastname'];
-      const companyCol = headers['company name'] ?? headers['company_name'] ?? headers['company'] ?? headers['companyname'];
-      const urlCol = headers['company url'] ?? headers['company_url'] ?? headers['url'] ?? headers['website'] ?? headers['companyurl'];
-
-      if (!firstNameCol && !lastNameCol && !companyCol && !urlCol) {
-        return Response.json({
-          error: 'Could not find expected columns. Please include: First Name, Last Name, Company Name, Company URL',
-        }, { status: 400 });
-      }
-
+      const rows: { getCell: (col: number) => string }[] = [];
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
+        rows.push({
+          getCell: (col: number) => {
+            const cellValue = row.getCell(col).value;
+            // Handle hyperlink objects from Excel
+            if (cellValue && typeof cellValue === 'object' && 'hyperlink' in cellValue) {
+              return String((cellValue as { hyperlink: string }).hyperlink ?? '').trim();
+            }
+            if (cellValue && typeof cellValue === 'object' && 'text' in cellValue) {
+              return String((cellValue as { text: string }).text ?? '').trim();
+            }
+            return String(cellValue ?? '').trim();
+          },
+        });
+      });
+      dataRows = rows;
+    }
 
-        const firstName = firstNameCol ? String(row.getCell(firstNameCol).value ?? '').trim() : '';
-        const lastName = lastNameCol ? String(row.getCell(lastNameCol).value ?? '').trim() : '';
-        const companyName = companyCol ? String(row.getCell(companyCol).value ?? '').trim() : '';
-        let companyUrl = urlCol ? String(row.getCell(urlCol).value ?? '').trim() : '';
+    // Find columns with flexible matching
+    const columnMap: Record<string, number | undefined> = {};
+    for (const field of REQUIRED_COLUMNS) {
+      columnMap[field] = findColumn(headers, field);
+    }
 
-        if (!firstName && !lastName && !companyName && !companyUrl) return;
+    // Validate all required columns are present
+    const missingColumns = REQUIRED_COLUMNS.filter((field) => columnMap[field] === undefined);
+    if (missingColumns.length > 0) {
+      const foundHeaders = Object.keys(headers).map((h) => `"${h}"`).join(', ');
+      const missingNames = missingColumns.map((f) => FRIENDLY_NAMES[f]).join(', ');
+      return Response.json({
+        error: `Missing required columns: ${missingNames}.\n\nColumns found in your file: ${foundHeaders}.\n\nPlease ensure your file has columns for: CRM ID, First Name, Last Name, Company Name, and Website URL.`,
+      }, { status: 400 });
+    }
 
-        if (companyUrl && !companyUrl.startsWith('http')) {
-          companyUrl = `https://${companyUrl}`;
-        }
+    // Parse data rows
+    const contacts: {
+      campaign_id: string;
+      crm_id: string;
+      first_name: string;
+      last_name: string;
+      company_name: string;
+      company_url: string;
+    }[] = [];
 
-        contacts.push({ campaign_id: id, first_name: firstName, last_name: lastName, company_name: companyName, company_url: companyUrl });
+    for (const row of dataRows) {
+      const crmId = row.getCell(columnMap.crm_id!);
+      const firstName = row.getCell(columnMap.first_name!);
+      const lastName = row.getCell(columnMap.last_name!);
+      const companyName = row.getCell(columnMap.company_name!);
+      let companyUrl = row.getCell(columnMap.company_url!);
+
+      // Skip empty rows
+      if (!crmId && !firstName && !lastName && !companyName && !companyUrl) continue;
+
+      // Normalize URL
+      if (companyUrl && !companyUrl.startsWith('http')) {
+        companyUrl = `https://${companyUrl}`;
+      }
+
+      contacts.push({
+        campaign_id: id,
+        crm_id: crmId,
+        first_name: firstName,
+        last_name: lastName,
+        company_name: companyName,
+        company_url: companyUrl,
       });
     }
 

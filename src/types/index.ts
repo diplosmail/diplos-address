@@ -14,6 +14,7 @@ export interface Campaign {
 export interface Contact {
   id: string;
   campaign_id: string;
+  crm_id: string;
   first_name: string;
   last_name: string;
   company_name: string;

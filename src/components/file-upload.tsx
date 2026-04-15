@@ -79,10 +79,10 @@ export function FileUpload({ campaignId, onUploadComplete }: FileUploadProps) {
       ) : (
         <>
           <p className="text-sm text-muted mb-3">
-            Drag and drop your XLS file here, or click to browse.
+            Drag and drop your XLS or CSV file here, or click to browse.
           </p>
           <p className="text-xs text-muted mb-4">
-            Expected columns: First Name, Last Name, Company Name, Company URL
+            Required columns: CRM ID, First Name, Last Name, Company Name, Website URL
           </p>
           <Button
             variant="secondary"
@@ -94,7 +94,12 @@ export function FileUpload({ campaignId, onUploadComplete }: FileUploadProps) {
         </>
       )}
 
-      {error && <p className="text-sm text-danger mt-3">{error}</p>}
+      {error && (
+        <div className="mt-4 text-left bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-danger font-medium mb-1">Upload Error</p>
+          <p className="text-sm text-danger whitespace-pre-line">{error}</p>
+        </div>
+      )}
     </div>
   );
 }
