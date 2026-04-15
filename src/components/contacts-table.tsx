@@ -51,8 +51,8 @@ export function ContactsTable({ contacts }: ContactsTableProps) {
                 </td>
                 <td className="py-3 pr-4">
                   {address ? (
-                    <span title={`${address.address_line1}, ${address.city}, ${address.state} ${address.zip}`}>
-                      {address.address_line1}, {address.city}, {address.state} {address.zip}
+                    <span title={`${address.street_address}, ${address.city}, ${address.state_region} ${address.postal_code}`}>
+                      {address.street_address}, {address.city}, {address.state_region} {address.postal_code}
                     </span>
                   ) : (
                     <span className="text-muted">-</span>

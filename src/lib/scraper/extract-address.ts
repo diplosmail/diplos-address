@@ -1,12 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 export interface ExtractedAddress {
-  address_line1: string;
-  address_line2: string | null;
+  street_address: string;
+  street_address_2: string | null;
   city: string;
-  state: string;
-  zip: string;
-  country: string;
+  state_region: string;
+  postal_code: string;
+  country_region: string;
   confidence: 'high' | 'medium' | 'low';
   found: boolean;
 }
@@ -40,12 +40,12 @@ Extract the company's headquarters or main office physical mailing address. Look
 Respond with ONLY a JSON object (no markdown, no explanation):
 {
   "found": true/false,
-  "address_line1": "street address",
-  "address_line2": "suite/floor/unit or null",
+  "street_address": "street address",
+  "street_address_2": "suite/floor/unit or null",
   "city": "city name",
-  "state": "2-letter state code",
-  "zip": "zip code",
-  "country": "US",
+  "state_region": "2-letter state code",
+  "postal_code": "zip/postal code",
+  "country_region": "US",
   "confidence": "high/medium/low"
 }
 
@@ -57,10 +57,9 @@ If you cannot find a clear physical address, set "found": false and leave other 
   try {
     const content = message.content[0];
     if (content.type !== 'text') {
-      return { found: false, address_line1: '', address_line2: null, city: '', state: '', zip: '', country: 'US', confidence: 'low' };
+      return { found: false, street_address: '', street_address_2: null, city: '', state_region: '', postal_code: '', country_region: 'US', confidence: 'low' };
     }
 
-    // Clean the response - strip markdown code blocks if present
     let jsonStr = content.text.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
@@ -69,15 +68,15 @@ If you cannot find a clear physical address, set "found": false and leave other 
     const parsed = JSON.parse(jsonStr);
     return {
       found: Boolean(parsed.found),
-      address_line1: parsed.address_line1 || '',
-      address_line2: parsed.address_line2 || null,
+      street_address: parsed.street_address || '',
+      street_address_2: parsed.street_address_2 || null,
       city: parsed.city || '',
-      state: parsed.state || '',
-      zip: parsed.zip || '',
-      country: parsed.country || 'US',
+      state_region: parsed.state_region || '',
+      postal_code: parsed.postal_code || '',
+      country_region: parsed.country_region || 'US',
       confidence: parsed.confidence || 'low',
     };
   } catch {
-    return { found: false, address_line1: '', address_line2: null, city: '', state: '', zip: '', country: 'US', confidence: 'low' };
+    return { found: false, street_address: '', street_address_2: null, city: '', state_region: '', postal_code: '', country_region: 'US', confidence: 'low' };
   }
 }

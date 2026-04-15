@@ -3,21 +3,21 @@ export interface MelissaResult {
   is_deliverable: boolean;
   result_codes: string;
   formatted_address: {
-    address_line1: string;
-    address_line2: string | null;
+    street_address: string;
+    street_address_2: string | null;
     city: string;
-    state: string;
-    zip: string;
+    state_region: string;
+    postal_code: string;
   } | null;
   raw_response: Record<string, unknown>;
 }
 
 export async function verifyAddress(
-  addressLine1: string,
-  addressLine2: string | null,
+  streetAddress: string,
+  streetAddress2: string | null,
   city: string,
-  state: string,
-  zip: string
+  stateRegion: string,
+  postalCode: string
 ): Promise<MelissaResult> {
   const apiKey = process.env.MELISSA_API_KEY;
   if (!apiKey) {
@@ -32,11 +32,11 @@ export async function verifyAddress(
 
   const params = new URLSearchParams({
     id: apiKey,
-    a1: addressLine1,
-    a2: addressLine2 || '',
+    a1: streetAddress,
+    a2: streetAddress2 || '',
     city: city,
-    state: state,
-    postal: zip,
+    state: stateRegion,
+    postal: postalCode,
     ctry: 'US',
     format: 'json',
   });
@@ -71,12 +71,7 @@ export async function verifyAddress(
     }
 
     const resultCodes = record.Results || '';
-    // Melissa result codes: AV = Address Verified
-    // AS01 = Address verified to street level
-    // AS02 = Address verified to building/suite level
-    // AS03 = Address verified to premise/mailbox level
     const isVerified = resultCodes.includes('AV');
-    // Check for deliverability - no error codes (AE = Address Error)
     const isDeliverable = isVerified && !resultCodes.includes('AE');
 
     return {
@@ -85,11 +80,11 @@ export async function verifyAddress(
       result_codes: resultCodes,
       formatted_address: isVerified
         ? {
-            address_line1: record.AddressLine1 || addressLine1,
-            address_line2: record.AddressLine2 || addressLine2,
+            street_address: record.AddressLine1 || streetAddress,
+            street_address_2: record.AddressLine2 || streetAddress2,
             city: record.Locality || city,
-            state: record.AdministrativeArea || state,
-            zip: record.PostalCode || zip,
+            state_region: record.AdministrativeArea || stateRegion,
+            postal_code: record.PostalCode || postalCode,
           }
         : null,
       raw_response: record,

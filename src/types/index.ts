@@ -26,12 +26,12 @@ export interface Contact {
 export interface Address {
   id: string;
   contact_id: string;
-  address_line1: string;
-  address_line2: string | null;
+  street_address: string;
+  street_address_2: string | null;
   city: string;
-  state: string;
-  zip: string;
-  country: string;
+  state_region: string;
+  postal_code: string;
+  country_region: string;
   source: AddressSource;
   source_url: string | null;
   is_verified: boolean;

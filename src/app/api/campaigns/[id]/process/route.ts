@@ -46,12 +46,12 @@ export async function POST(
 
   try {
     let addressData: {
-      address_line1: string;
-      address_line2: string | null;
+      street_address: string;
+      street_address_2: string | null;
       city: string;
-      state: string;
-      zip: string;
-      country: string;
+      state_region: string;
+      postal_code: string;
+      country_region: string;
       source: AddressSource;
       source_url: string;
     } | null = null;
@@ -69,12 +69,12 @@ export async function POST(
 
         if (extracted.found) {
           addressData = {
-            address_line1: extracted.address_line1,
-            address_line2: extracted.address_line2,
+            street_address: extracted.street_address,
+            street_address_2: extracted.street_address_2,
             city: extracted.city,
-            state: extracted.state,
-            zip: extracted.zip,
-            country: extracted.country,
+            state_region: extracted.state_region,
+            postal_code: extracted.postal_code,
+            country_region: extracted.country_region,
             source: 'website',
             source_url: contact.company_url,
           };
@@ -91,12 +91,12 @@ export async function POST(
 
       if (fallback.found) {
         addressData = {
-          address_line1: fallback.address_line1,
-          address_line2: fallback.address_line2,
+          street_address: fallback.street_address,
+          street_address_2: fallback.street_address_2,
           city: fallback.city,
-          state: fallback.state,
-          zip: fallback.zip,
-          country: fallback.country,
+          state_region: fallback.state_region,
+          postal_code: fallback.postal_code,
+          country_region: fallback.country_region,
           source: fallback.source,
           source_url: contact.company_url,
         };
@@ -129,11 +129,11 @@ export async function POST(
       .eq('id', contact.id);
 
     const melissa = await verifyAddress(
-      addressData.address_line1,
-      addressData.address_line2,
+      addressData.street_address,
+      addressData.street_address_2,
       addressData.city,
-      addressData.state,
-      addressData.zip
+      addressData.state_region,
+      addressData.postal_code
     );
 
     // Use Melissa's formatted address if verification succeeded
@@ -142,12 +142,12 @@ export async function POST(
     // Save address record
     await supabase.from('addresses').insert({
       contact_id: contact.id,
-      address_line1: finalAddress.address_line1,
-      address_line2: finalAddress.address_line2,
+      street_address: finalAddress.street_address,
+      street_address_2: finalAddress.street_address_2,
       city: finalAddress.city,
-      state: finalAddress.state,
-      zip: finalAddress.zip,
-      country: addressData.country,
+      state_region: finalAddress.state_region,
+      postal_code: finalAddress.postal_code,
+      country_region: addressData.country_region,
       source: addressData.source,
       source_url: addressData.source_url,
       is_verified: melissa.is_verified,
