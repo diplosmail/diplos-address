@@ -1,6 +1,6 @@
 export type CampaignStatus = 'draft' | 'processing' | 'complete' | 'failed';
 export type ContactStatus = 'pending' | 'scraping' | 'verifying' | 'complete' | 'failed';
-export type AddressSource = 'website' | 'google_maps' | 'other';
+export type AddressSource = 'website' | 'google_maps' | 'bbb' | 'yelp' | 'public_directory' | 'llm_knowledge' | 'other';
 
 export interface Campaign {
   id: string;

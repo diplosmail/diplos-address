@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as cheerio from 'cheerio';
+import type { AddressSource } from '@/types';
 
 export interface FallbackAddress {
   street_address: string;
@@ -8,7 +9,7 @@ export interface FallbackAddress {
   state_region: string;
   postal_code: string;
   country_region: string;
-  source: 'google_maps' | 'other';
+  source: AddressSource;
   found: boolean;
 }
 
@@ -37,50 +38,13 @@ async function fetchPageText(url: string): Promise<string> {
   }
 }
 
-// Tier 2: Google Maps search
-async function searchGoogleMaps(companyName: string): Promise<string> {
-  const query = encodeURIComponent(`${companyName} headquarters address`);
-  const url = `https://www.google.com/maps/search/${query}`;
-  return fetchPageText(url);
-}
-
-// Tier 3: BBB, Yelp, and other public directories
-async function searchPublicDirectories(companyName: string): Promise<{ source: string; text: string }[]> {
-  const results: { source: string; text: string }[] = [];
-
-  const searches = [
-    {
-      source: 'BBB',
-      url: `https://www.google.com/search?q=${encodeURIComponent(`"${companyName}" site:bbb.org address`)}`,
-    },
-    {
-      source: 'Yelp/directories',
-      url: `https://www.google.com/search?q=${encodeURIComponent(`"${companyName}" headquarters address yelp OR bloomberg OR crunchbase`)}`,
-    },
-  ];
-
-  const fetches = await Promise.all(
-    searches.map(async (s) => {
-      const text = await fetchPageText(s.url);
-      return { source: s.source, text };
-    })
-  );
-
-  for (const f of fetches) {
-    if (f.text.length > 50) {
-      results.push(f);
-    }
-  }
-
-  return results;
-}
-
 export async function searchFallbackAddress(
   companyName: string,
   companyUrl: string
 ): Promise<FallbackAddress> {
-  // Tier 2: Try Google Maps
-  const googleMapsText = await searchGoogleMaps(companyName);
+  // Tier 2: Google Maps
+  const googleQuery = encodeURIComponent(`${companyName} headquarters address`);
+  const googleMapsText = await fetchPageText(`https://www.google.com/maps/search/${googleQuery}`);
 
   if (googleMapsText.length > 100) {
     const result = await extractWithLLM(companyName, companyUrl, googleMapsText, 'Google Maps');
@@ -89,21 +53,29 @@ export async function searchFallbackAddress(
     }
   }
 
-  // Tier 3: Try public directories (BBB, Yelp, etc.)
-  const directoryResults = await searchPublicDirectories(companyName);
-
-  if (directoryResults.length > 0) {
-    const combinedText = directoryResults
-      .map((r) => `--- ${r.source} ---\n${r.text.slice(0, 3000)}`)
-      .join('\n\n');
-
-    const result = await extractWithLLM(companyName, companyUrl, combinedText, 'public directories (BBB, Yelp, etc.)');
+  // Tier 3a: BBB
+  const bbbText = await fetchPageText(
+    `https://www.google.com/search?q=${encodeURIComponent(`"${companyName}" site:bbb.org address`)}`
+  );
+  if (bbbText.length > 100) {
+    const result = await extractWithLLM(companyName, companyUrl, bbbText, 'BBB (Better Business Bureau)');
     if (result.found) {
-      return { ...result, source: 'other' };
+      return { ...result, source: 'bbb' };
     }
   }
 
-  // Final attempt: Ask Claude from its training knowledge
+  // Tier 3b: Yelp and other directories
+  const directoryText = await fetchPageText(
+    `https://www.google.com/search?q=${encodeURIComponent(`"${companyName}" headquarters address site:yelp.com OR site:bloomberg.com OR site:crunchbase.com`)}`
+  );
+  if (directoryText.length > 100) {
+    const result = await extractWithLLM(companyName, companyUrl, directoryText, 'Yelp/Bloomberg/Crunchbase');
+    if (result.found) {
+      return { ...result, source: 'public_directory' };
+    }
+  }
+
+  // Tier 4: LLM training knowledge (last resort)
   const result = await extractFromKnowledge(companyName, companyUrl);
   return result;
 }
@@ -113,7 +85,7 @@ async function extractWithLLM(
   companyUrl: string,
   sourceText: string,
   sourceName: string
-): Promise<Omit<FallbackAddress, 'source'>> {
+): Promise<Omit<FallbackAddress, 'source'> & { source: AddressSource }> {
   const truncated = sourceText.length > 6000 ? sourceText.slice(0, 6000) : sourceText;
 
   const message = await client.messages.create({
@@ -165,10 +137,10 @@ IMPORTANT: Only set found=true if you are genuinely confident. It's better to re
   });
 
   const result = parseResponse(message);
-  return { ...result, source: result.found ? 'other' : 'other' };
+  return { ...result, source: 'llm_knowledge' };
 }
 
-function parseResponse(message: Anthropic.Message): Omit<FallbackAddress, 'source'> & { source: 'google_maps' | 'other' } {
+function parseResponse(message: Anthropic.Message): Omit<FallbackAddress, 'source'> & { source: AddressSource } {
   try {
     const content = message.content[0];
     if (content.type !== 'text') return notFound();

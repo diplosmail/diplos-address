@@ -96,6 +96,14 @@ function findContactLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
   return [...found];
 }
 
+// Common contact page URL slugs to try directly
+const COMMON_CONTACT_SLUGS = [
+  '/contact', '/contact-us', '/contact-us-2', '/contact/',
+  '/about', '/about-us', '/about/',
+  '/locations', '/location', '/offices',
+  '/headquarters', '/our-locations',
+];
+
 export async function fetchWebsiteText(url: string): Promise<WebsiteContent> {
   try {
     // Step 1: Fetch the homepage
@@ -108,9 +116,19 @@ export async function fetchWebsiteText(url: string): Promise<WebsiteContent> {
     const homeText = extractPageText($home);
     const pages = [{ url, text: homeText }];
 
-    // Step 2: Find and fetch contact/about/location pages (up to 3)
+    // Step 2: Find contact/about/location pages from links
     const contactLinks = findContactLinks($home, url);
-    const toFetch = contactLinks.slice(0, 3);
+
+    // Step 3: Also try common contact URL slugs directly
+    const baseOrigin = new URL(url).origin;
+    for (const slug of COMMON_CONTACT_SLUGS) {
+      const candidate = baseOrigin + slug;
+      if (!contactLinks.includes(candidate)) {
+        contactLinks.push(candidate);
+      }
+    }
+
+    const toFetch = contactLinks.slice(0, 5);
 
     const subpageResults = await Promise.all(
       toFetch.map(async (link) => {

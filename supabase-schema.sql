@@ -38,7 +38,7 @@ create table addresses (
   state_region text not null default '',
   postal_code text not null default '',
   country_region text not null default 'US',
-  source text not null default 'website' check (source in ('website', 'google_maps', 'other')),
+  source text not null default 'website' check (source in ('website', 'google_maps', 'bbb', 'yelp', 'public_directory', 'llm_knowledge', 'other')),
   source_url text,
   is_verified boolean not null default false,
   is_deliverable boolean not null default false,

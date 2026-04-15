@@ -29,7 +29,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <header className="border-b border-border bg-white">
-          <div className="mx-auto max-w-6xl flex items-center justify-between px-6 h-14">
+          <div className="mx-auto max-w-[1600px] flex items-center justify-between px-6 h-14">
             <a href="/" className="text-lg font-semibold tracking-tight">
               Diplos Address
             </a>
@@ -44,7 +44,7 @@ export default function RootLayout({
           </div>
         </header>
         <main className="flex-1">
-          <div className="mx-auto max-w-6xl px-6 py-8">
+          <div className="mx-auto max-w-[1600px] px-6 py-8">
             {children}
           </div>
         </main>

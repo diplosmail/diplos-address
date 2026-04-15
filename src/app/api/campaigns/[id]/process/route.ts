@@ -5,6 +5,9 @@ import { searchFallbackAddress } from '@/lib/scraper/fallback';
 import { verifyAddress } from '@/lib/melissa/verify';
 import type { AddressSource } from '@/types';
 
+// Allow up to 60 seconds for scraping + LLM + Melissa verification
+export const maxDuration = 60;
+
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
