@@ -58,6 +58,13 @@ export default function CampaignPage() {
   const hasContacts = contacts.length > 0;
   const hasCompletedContacts = contacts.some((c) => c.status === 'complete');
 
+  // Count contacts ready for verification (scraped status)
+  const scrapedReadyCount = contacts.filter((c) => c.status === 'scraped').length;
+  const verifiedCount = contacts.filter((c) => c.status === 'complete').length;
+  const totalToVerify = scrapedReadyCount + verifiedCount + contacts.filter((c) => c.status === 'verifying').length;
+
+  const scrapingDone = campaign.scraped_count >= campaign.total_contacts;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -87,13 +94,35 @@ export default function CampaignPage() {
       {hasContacts && (
         <Card>
           <h2 className="text-lg font-medium mb-4">Processing</h2>
-          <ProcessingController
-            campaignId={id}
-            totalContacts={campaign.total_contacts}
-            initialProcessedCount={campaign.processed_count}
-            campaignStatus={campaign.status}
-            onProgress={fetchData}
-          />
+          <div className="space-y-6">
+            <ProcessingController
+              campaignId={id}
+              endpoint="scrape"
+              label="Step 1: Scrape Addresses"
+              buttonLabel="Start Scraping"
+              resumeLabel="Resume Scraping"
+              totalCount={campaign.total_contacts}
+              initialCompletedCount={campaign.scraped_count}
+              countField="scrapedCount"
+              onProgress={fetchData}
+            />
+
+            <div className="border-t border-border pt-6">
+              <ProcessingController
+                campaignId={id}
+                endpoint="verify"
+                label="Step 2: Verify with Melissa"
+                buttonLabel="Start Verification"
+                resumeLabel="Resume Verification"
+                totalCount={totalToVerify}
+                initialCompletedCount={verifiedCount}
+                countField="processedCount"
+                disabled={totalToVerify === 0}
+                disabledMessage="Scrape addresses first before verifying."
+                onProgress={fetchData}
+              />
+            </div>
+          </div>
         </Card>
       )}
 

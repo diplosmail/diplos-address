@@ -7,6 +7,7 @@ create table campaigns (
   name text not null,
   status text not null default 'draft' check (status in ('draft', 'processing', 'complete', 'failed')),
   total_contacts int not null default 0,
+  scraped_count int not null default 0,
   processed_count int not null default 0,
   created_at timestamptz not null default now()
 );
@@ -20,7 +21,7 @@ create table contacts (
   last_name text not null default '',
   company_name text not null default '',
   company_url text not null default '',
-  status text not null default 'pending' check (status in ('pending', 'scraping', 'verifying', 'complete', 'failed')),
+  status text not null default 'pending' check (status in ('pending', 'scraping', 'scraped', 'verifying', 'complete', 'failed')),
   error_message text,
   created_at timestamptz not null default now()
 );

@@ -2,10 +2,8 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { fetchWebsiteText } from '@/lib/scraper/fetch-website';
 import { extractAddressFromText } from '@/lib/scraper/extract-address';
 import { searchFallbackAddress } from '@/lib/scraper/fallback';
-import { verifyAddress } from '@/lib/melissa/verify';
 import type { AddressSource } from '@/types';
 
-// Allow up to 60 seconds for scraping + LLM + Melissa verification
 export const maxDuration = 60;
 
 export async function POST(
@@ -26,12 +24,6 @@ export async function POST(
     .single();
 
   if (fetchError || !contact) {
-    // No more pending contacts — mark campaign complete
-    await supabase
-      .from('campaigns')
-      .update({ status: 'complete' })
-      .eq('id', id);
-
     return Response.json({ done: true });
   }
 
@@ -41,7 +33,7 @@ export async function POST(
     .update({ status: 'scraping' })
     .eq('id', contact.id);
 
-  // Update campaign status to processing
+  // Update campaign status
   await supabase
     .from('campaigns')
     .update({ status: 'processing' })
@@ -106,7 +98,6 @@ export async function POST(
     }
 
     if (!addressData) {
-      // Could not find address from any source
       await supabase
         .from('contacts')
         .update({
@@ -115,103 +106,74 @@ export async function POST(
         })
         .eq('id', contact.id);
 
-      await incrementProcessedCount(supabase, id);
+      await supabase.rpc('increment_scraped_count', { campaign_id_input: id });
 
       return Response.json({
         done: false,
         contactName: `${contact.first_name} ${contact.last_name}`,
-        processedCount: await getProcessedCount(supabase, id),
+        scrapedCount: await getScrapedCount(supabase, id),
       });
     }
 
-    // Step 3: Verify with Melissa
-    await supabase
-      .from('contacts')
-      .update({ status: 'verifying' })
-      .eq('id', contact.id);
-
-    const melissa = await verifyAddress(
-      addressData.street_address,
-      addressData.street_address_2,
-      addressData.city,
-      addressData.state_region,
-      addressData.postal_code
-    );
-
-    // Use Melissa's formatted address if verification succeeded
-    const finalAddress = melissa.formatted_address || addressData;
-
-    // Save address record
+    // Save address record (unverified)
     const { error: insertError } = await supabase.from('addresses').insert({
       contact_id: contact.id,
-      street_address: finalAddress.street_address,
-      street_address_2: finalAddress.street_address_2,
-      city: finalAddress.city,
-      state_region: finalAddress.state_region,
-      postal_code: finalAddress.postal_code,
+      street_address: addressData.street_address,
+      street_address_2: addressData.street_address_2,
+      city: addressData.city,
+      state_region: addressData.state_region,
+      postal_code: addressData.postal_code,
       country_region: addressData.country_region,
       source: addressData.source,
       source_url: addressData.source_url,
-      is_verified: melissa.is_verified,
-      is_deliverable: melissa.is_deliverable,
-      melissa_result: {
-        ...melissa.raw_response,
-        _result_codes: melissa.result_codes,
-        _address_type: melissa.address_type,
-      },
+      is_verified: false,
+      is_deliverable: false,
     });
 
     if (insertError) {
       throw new Error(`Failed to save address: ${insertError.message}`);
     }
 
-    // Mark contact as complete
+    // Mark contact as scraped (ready for verification)
     await supabase
       .from('contacts')
-      .update({ status: 'complete' })
+      .update({ status: 'scraped' })
       .eq('id', contact.id);
 
-    await incrementProcessedCount(supabase, id);
+    await supabase.rpc('increment_scraped_count', { campaign_id_input: id });
 
     return Response.json({
       done: false,
       contactName: `${contact.first_name} ${contact.last_name}`,
-      processedCount: await getProcessedCount(supabase, id),
+      scrapedCount: await getScrapedCount(supabase, id),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Processing failed';
+    const message = err instanceof Error ? err.message : 'Scraping failed';
 
     await supabase
       .from('contacts')
       .update({ status: 'failed', error_message: message })
       .eq('id', contact.id);
 
-    await incrementProcessedCount(supabase, id);
+    await supabase.rpc('increment_scraped_count', { campaign_id_input: id });
 
     return Response.json({
       done: false,
       contactName: `${contact.first_name} ${contact.last_name}`,
-      processedCount: await getProcessedCount(supabase, id),
+      scrapedCount: await getScrapedCount(supabase, id),
       error: message,
     });
   }
 }
 
-async function incrementProcessedCount(
-  supabase: ReturnType<typeof getSupabaseServerClient>,
-  campaignId: string
-) {
-  await supabase.rpc('increment_processed_count', { campaign_id_input: campaignId });
-}
-
-async function getProcessedCount(
+async function getScrapedCount(
   supabase: ReturnType<typeof getSupabaseServerClient>,
   campaignId: string
 ): Promise<number> {
   const { data } = await supabase
     .from('campaigns')
-    .select('processed_count')
+    .select('scraped_count')
     .eq('id', campaignId)
     .single();
-  return data?.processed_count ?? 0;
+  return data?.scraped_count ?? 0;
 }

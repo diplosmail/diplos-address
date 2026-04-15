@@ -1,5 +1,5 @@
 export type CampaignStatus = 'draft' | 'processing' | 'complete' | 'failed';
-export type ContactStatus = 'pending' | 'scraping' | 'verifying' | 'complete' | 'failed';
+export type ContactStatus = 'pending' | 'scraping' | 'scraped' | 'verifying' | 'complete' | 'failed';
 export type AddressSource = 'website' | 'google_maps' | 'bbb' | 'yelp' | 'public_directory' | 'llm_knowledge' | 'other';
 
 export interface Campaign {
@@ -7,6 +7,7 @@ export interface Campaign {
   name: string;
   status: CampaignStatus;
   total_contacts: number;
+  scraped_count: number;
   processed_count: number;
   created_at: string;
 }

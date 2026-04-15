@@ -6,34 +6,46 @@ import { Progress } from '@/components/ui/progress';
 
 interface ProcessingControllerProps {
   campaignId: string;
-  totalContacts: number;
-  initialProcessedCount: number;
-  campaignStatus: string;
+  endpoint: 'scrape' | 'verify';
+  label: string;
+  buttonLabel: string;
+  resumeLabel: string;
+  totalCount: number;
+  initialCompletedCount: number;
+  countField: string;
+  disabled?: boolean;
+  disabledMessage?: string;
   onProgress: () => void;
 }
 
 export function ProcessingController({
   campaignId,
-  totalContacts,
-  initialProcessedCount,
-  campaignStatus,
+  endpoint,
+  label,
+  buttonLabel,
+  resumeLabel,
+  totalCount,
+  initialCompletedCount,
+  countField,
+  disabled = false,
+  disabledMessage,
   onProgress,
 }: ProcessingControllerProps) {
   const [processing, setProcessing] = useState(false);
-  const [processedCount, setProcessedCount] = useState(initialProcessedCount);
+  const [completedCount, setCompletedCount] = useState(initialCompletedCount);
   const [currentContact, setCurrentContact] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef(false);
 
   useEffect(() => {
-    setProcessedCount(initialProcessedCount);
-  }, [initialProcessedCount]);
+    setCompletedCount(initialCompletedCount);
+  }, [initialCompletedCount]);
 
   const processNext = useCallback(async () => {
     if (abortRef.current) return false;
 
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/process`, {
+      const res = await fetch(`/api/campaigns/${campaignId}/${endpoint}`, {
         method: 'POST',
       });
 
@@ -48,7 +60,7 @@ export function ProcessingController({
         return false;
       }
 
-      setProcessedCount(data.processedCount);
+      setCompletedCount(data[countField] ?? completedCount + 1);
       setCurrentContact(data.contactName || null);
       onProgress();
       return true;
@@ -56,7 +68,7 @@ export function ProcessingController({
       setError('Processing interrupted. You can resume anytime.');
       return false;
     }
-  }, [campaignId, onProgress]);
+  }, [campaignId, endpoint, countField, completedCount, onProgress]);
 
   async function startProcessing() {
     setProcessing(true);
@@ -77,13 +89,14 @@ export function ProcessingController({
     abortRef.current = true;
   }
 
-  const isComplete = campaignStatus === 'complete' || processedCount >= totalContacts;
+  const isComplete = completedCount >= totalCount;
 
-  if (totalContacts === 0) return null;
+  if (totalCount === 0) return null;
 
   return (
-    <div className="space-y-4">
-      <Progress value={processedCount} max={totalContacts} />
+    <div className="space-y-3">
+      <h3 className="text-sm font-medium text-foreground">{label}</h3>
+      <Progress value={completedCount} max={totalCount} />
 
       {currentContact && processing && (
         <p className="text-sm text-muted">
@@ -93,21 +106,22 @@ export function ProcessingController({
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      <div className="flex gap-3">
-        {!isComplete && !processing && (
-          <Button onClick={startProcessing}>
-            {processedCount > 0 ? 'Resume Processing' : 'Start Processing'}
+      <div className="flex gap-3 items-center">
+        {disabled && !isComplete && (
+          <p className="text-sm text-muted">{disabledMessage}</p>
+        )}
+        {!disabled && !isComplete && !processing && (
+          <Button onClick={startProcessing} size="sm">
+            {completedCount > 0 ? resumeLabel : buttonLabel}
           </Button>
         )}
         {processing && (
-          <Button variant="secondary" onClick={stopProcessing}>
+          <Button variant="secondary" size="sm" onClick={stopProcessing}>
             Pause
           </Button>
         )}
         {isComplete && (
-          <p className="text-sm text-success font-medium">
-            All contacts processed.
-          </p>
+          <p className="text-sm text-success font-medium">Complete</p>
         )}
       </div>
     </div>

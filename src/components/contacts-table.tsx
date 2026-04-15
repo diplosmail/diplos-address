@@ -6,7 +6,8 @@ import type { ContactWithAddress, ContactStatus, AddressSource } from '@/types';
 const statusConfig: Record<ContactStatus, { label: string; variant: 'default' | 'info' | 'warning' | 'success' | 'danger' }> = {
   pending: { label: 'Pending', variant: 'default' },
   scraping: { label: 'Scraping', variant: 'info' },
-  verifying: { label: 'Verifying', variant: 'warning' },
+  scraped: { label: 'Scraped', variant: 'warning' },
+  verifying: { label: 'Verifying', variant: 'info' },
   complete: { label: 'Complete', variant: 'success' },
   failed: { label: 'Failed', variant: 'danger' },
 };
