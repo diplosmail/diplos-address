@@ -56,15 +56,14 @@ export async function POST(
       source_url: string;
     } | null = null;
 
-    // Step 1: Try website scraping
+    // Step 1: Try website scraping (homepage + contact/about/location pages)
     if (contact.company_url) {
       const websiteContent = await fetchWebsiteText(contact.company_url);
 
-      if (websiteContent.success && websiteContent.text) {
+      if (websiteContent.success && websiteContent.pages.length > 0) {
         const extracted = await extractAddressFromText(
-          websiteContent.text,
-          contact.company_name,
-          contact.company_url
+          websiteContent.pages,
+          contact.company_name
         );
 
         if (extracted.found) {
@@ -82,7 +81,7 @@ export async function POST(
       }
     }
 
-    // Step 2: Fallback if website scraping failed
+    // Step 2: Fallback — Google Maps, then BBB/Yelp, then LLM knowledge
     if (!addressData) {
       const fallback = await searchFallbackAddress(
         contact.company_name,

@@ -14,42 +14,50 @@ export interface ExtractedAddress {
 const client = new Anthropic();
 
 export async function extractAddressFromText(
-  text: string,
-  companyName: string,
-  sourceUrl: string
+  pages: { url: string; text: string }[],
+  companyName: string
 ): Promise<ExtractedAddress> {
+  // Build context from all scraped pages, truncating each to keep total reasonable
+  const maxPerPage = Math.floor(12000 / pages.length);
+  const pagesContext = pages
+    .map((p, i) => {
+      const truncated = p.text.length > maxPerPage ? p.text.slice(0, maxPerPage) : p.text;
+      return `=== PAGE ${i + 1}: ${p.url} ===\n${truncated}`;
+    })
+    .join('\n\n');
+
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 512,
+    max_tokens: 1024,
     messages: [
       {
         role: 'user',
-        content: `You are extracting the headquarters/main office mailing address for the company "${companyName}" from their website content.
+        content: `You are an expert at finding company headquarters addresses from website content. Your task is to find the physical mailing address for "${companyName}".
 
-Website URL: ${sourceUrl}
+I have scraped ${pages.length} page(s) from their website. Carefully review ALL the content below.
 
-Website content:
-${text}
+${pagesContext}
 
-Extract the company's headquarters or main office physical mailing address. Look for:
-- "Headquarters", "HQ", "Main Office", "Corporate Office" sections
-- Contact pages with physical addresses
-- Footer addresses
-- About pages with location info
+INSTRUCTIONS:
+1. Look carefully through ALL pages for a physical street address
+2. Prioritize addresses labeled as: "Headquarters", "HQ", "Corporate Office", "Main Office", "Corporate Headquarters"
+3. Check these locations in order of priority:
+   - Contact page content
+   - Footer sections (addresses are very commonly in footers)
+   - About page content
+   - Structured address data (schema.org markup, vcard)
+   - Any other page content
+4. If multiple addresses exist, pick the HEADQUARTERS / main office
+5. Parse the address into structured components
 
-Respond with ONLY a JSON object (no markdown, no explanation):
-{
-  "found": true/false,
-  "street_address": "street address",
-  "street_address_2": "suite/floor/unit or null",
-  "city": "city name",
-  "state_region": "2-letter state code",
-  "postal_code": "zip/postal code",
-  "country_region": "US",
-  "confidence": "high/medium/low"
-}
+Respond with ONLY a JSON object (no markdown, no code blocks, no explanation):
+{"found": true, "street_address": "18540 Apache Dr.", "street_address_2": "Unit 100", "city": "Parker", "state_region": "CO", "postal_code": "80134", "country_region": "US", "confidence": "high"}
 
-If you cannot find a clear physical address, set "found": false and leave other fields empty strings.`,
+Rules:
+- street_address_2 should be null if there is no suite/unit/floor
+- state_region should be the 2-letter state code
+- confidence: "high" = clearly labeled HQ address, "medium" = address found but not explicitly HQ, "low" = partial or uncertain
+- If you truly cannot find ANY physical address, respond: {"found": false, "street_address": "", "street_address_2": null, "city": "", "state_region": "", "postal_code": "", "country_region": "US", "confidence": "low"}`,
       },
     ],
   });
@@ -57,7 +65,7 @@ If you cannot find a clear physical address, set "found": false and leave other 
   try {
     const content = message.content[0];
     if (content.type !== 'text') {
-      return { found: false, street_address: '', street_address_2: null, city: '', state_region: '', postal_code: '', country_region: 'US', confidence: 'low' };
+      return notFound();
     }
 
     let jsonStr = content.text.trim();
@@ -77,6 +85,10 @@ If you cannot find a clear physical address, set "found": false and leave other 
       confidence: parsed.confidence || 'low',
     };
   } catch {
-    return { found: false, street_address: '', street_address_2: null, city: '', state_region: '', postal_code: '', country_region: 'US', confidence: 'low' };
+    return notFound();
   }
+}
+
+function notFound(): ExtractedAddress {
+  return { found: false, street_address: '', street_address_2: null, city: '', state_region: '', postal_code: '', country_region: 'US', confidence: 'low' };
 }
