@@ -60,7 +60,7 @@ export function ProcessingController({
         return false;
       }
 
-      setCompletedCount(data[countField] ?? completedCount + 1);
+      setCompletedCount((prev) => prev + 1);
       setCurrentContact(data.contactName || null);
       onProgress();
       return true;

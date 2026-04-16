@@ -58,10 +58,13 @@ export default function CampaignPage() {
   const hasContacts = contacts.length > 0;
   const hasCompletedContacts = contacts.some((c) => c.status === 'complete');
 
-  // Count contacts ready for verification (scraped status)
-  const scrapedReadyCount = contacts.filter((c) => c.status === 'scraped').length;
-  const verifiedCount = contacts.filter((c) => c.status === 'complete').length;
-  const totalToVerify = scrapedReadyCount + verifiedCount + contacts.filter((c) => c.status === 'verifying').length;
+  // Verification progress: count contacts that have addresses (scraped, verifying, or complete)
+  const contactsWithAddresses = contacts.filter(
+    (c) => c.addresses?.length > 0 || c.status === 'scraped' || c.status === 'verifying' || c.status === 'complete'
+  ).length;
+  const verifiedCount = contacts.filter(
+    (c) => c.status === 'complete' && c.addresses?.[0]?.is_verified
+  ).length;
 
   const scrapingDone = campaign.scraped_count >= campaign.total_contacts;
 
@@ -114,10 +117,10 @@ export default function CampaignPage() {
                 label="Step 2: Verify with Melissa"
                 buttonLabel="Start Verification"
                 resumeLabel="Resume Verification"
-                totalCount={totalToVerify}
+                totalCount={contactsWithAddresses}
                 initialCompletedCount={verifiedCount}
                 countField="processedCount"
-                disabled={totalToVerify === 0}
+                disabled={contactsWithAddresses === 0}
                 disabledMessage="Scrape addresses first before verifying."
                 onProgress={fetchData}
               />
