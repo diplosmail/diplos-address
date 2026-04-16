@@ -1,14 +1,24 @@
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { DEFAULT_COLUMNS } from '@/lib/export-columns';
 
-// Ensure default columns exist in the DB
+// Ensure default columns exist in the DB and remove stale ones
 async function seedDefaults(supabase: ReturnType<typeof getSupabaseServerClient>) {
   const { data: existing } = await supabase
     .from('export_settings')
-    .select('column_key')
+    .select('id, column_key')
     .eq('column_type', 'dynamic');
 
   const existingKeys = new Set((existing || []).map((e) => e.column_key));
+  const validKeys = new Set(DEFAULT_COLUMNS.map((c) => c.column_key));
+
+  // Remove dynamic columns that are no longer in the default list
+  const staleIds = (existing || [])
+    .filter((e) => !validKeys.has(e.column_key))
+    .map((e) => e.id);
+
+  if (staleIds.length > 0) {
+    await supabase.from('export_settings').delete().in('id', staleIds);
+  }
 
   // Find max order
   const { data: maxRow } = await supabase
@@ -19,6 +29,7 @@ async function seedDefaults(supabase: ReturnType<typeof getSupabaseServerClient>
 
   let nextOrder = maxRow && maxRow.length > 0 ? maxRow[0].column_order + 1 : 0;
 
+  // Insert missing default columns
   const toInsert = DEFAULT_COLUMNS
     .filter((col) => !existingKeys.has(col.column_key))
     .map((col) => ({
