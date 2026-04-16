@@ -40,6 +40,56 @@ export async function POST(
     .eq('id', id);
 
   try {
+    // Dedup: Check if another contact in this campaign with the same company_url
+    // already has an address. If so, copy it instead of scraping again.
+    if (contact.company_url) {
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id, addresses(*)')
+        .eq('campaign_id', id)
+        .eq('company_url', contact.company_url)
+        .in('status', ['scraped', 'verifying', 'complete'])
+        .neq('id', contact.id)
+        .limit(1)
+        .single();
+
+      const existingAddress = existingContact?.addresses?.[0];
+      if (existingAddress) {
+        // Copy the address for this contact
+        const { error: copyError } = await supabase.from('addresses').insert({
+          contact_id: contact.id,
+          street_address: existingAddress.street_address,
+          street_address_2: existingAddress.street_address_2,
+          city: existingAddress.city,
+          state_region: existingAddress.state_region,
+          postal_code: existingAddress.postal_code,
+          country_region: existingAddress.country_region,
+          source: existingAddress.source,
+          source_url: existingAddress.source_url,
+          is_verified: existingAddress.is_verified,
+          is_deliverable: existingAddress.is_deliverable,
+          melissa_result: existingAddress.melissa_result,
+        });
+
+        if (!copyError) {
+          // If the source was already verified, mark complete; otherwise scraped
+          const newStatus = existingAddress.is_verified ? 'complete' : 'scraped';
+          await supabase
+            .from('contacts')
+            .update({ status: newStatus })
+            .eq('id', contact.id);
+
+          await supabase.rpc('increment_scraped_count', { campaign_id_input: id });
+
+          return Response.json({
+            done: false,
+            contactName: `${contact.first_name} ${contact.last_name} (reused from ${contact.company_name})`,
+            scrapedCount: await getScrapedCount(supabase, id),
+          });
+        }
+      }
+    }
+
     let addressData: {
       street_address: string;
       street_address_2: string | null;
