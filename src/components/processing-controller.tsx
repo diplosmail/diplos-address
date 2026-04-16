@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
@@ -11,8 +11,7 @@ interface ProcessingControllerProps {
   buttonLabel: string;
   resumeLabel: string;
   totalCount: number;
-  initialCompletedCount: number;
-  countField: string;
+  completedCount: number;
   disabled?: boolean;
   disabledMessage?: string;
   onProgress: () => void;
@@ -25,21 +24,15 @@ export function ProcessingController({
   buttonLabel,
   resumeLabel,
   totalCount,
-  initialCompletedCount,
-  countField,
+  completedCount,
   disabled = false,
   disabledMessage,
   onProgress,
 }: ProcessingControllerProps) {
   const [processing, setProcessing] = useState(false);
-  const [completedCount, setCompletedCount] = useState(initialCompletedCount);
   const [currentContact, setCurrentContact] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef(false);
-
-  useEffect(() => {
-    setCompletedCount(initialCompletedCount);
-  }, [initialCompletedCount]);
 
   const processNext = useCallback(async () => {
     if (abortRef.current) return false;
@@ -60,15 +53,14 @@ export function ProcessingController({
         return false;
       }
 
-      setCompletedCount((prev) => prev + 1);
       setCurrentContact(data.contactName || null);
-      onProgress();
+      await onProgress();
       return true;
     } catch {
       setError('Processing interrupted. You can resume anytime.');
       return false;
     }
-  }, [campaignId, endpoint, countField, completedCount, onProgress]);
+  }, [campaignId, endpoint, onProgress]);
 
   async function startProcessing() {
     setProcessing(true);
@@ -82,21 +74,23 @@ export function ProcessingController({
 
     setProcessing(false);
     setCurrentContact(null);
-    onProgress();
+    await onProgress();
   }
 
   function stopProcessing() {
     abortRef.current = true;
   }
 
-  const isComplete = completedCount >= totalCount;
+  const isComplete = totalCount > 0 && completedCount >= totalCount;
 
-  if (totalCount === 0) return null;
+  if (totalCount === 0 && !disabled) return null;
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-foreground">{label}</h3>
-      <Progress value={completedCount} max={totalCount} />
+      {totalCount > 0 && (
+        <Progress value={Math.min(completedCount, totalCount)} max={totalCount} />
+      )}
 
       {currentContact && processing && (
         <p className="text-sm text-muted">

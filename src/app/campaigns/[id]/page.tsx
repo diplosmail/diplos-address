@@ -105,8 +105,7 @@ export default function CampaignPage() {
               buttonLabel="Start Scraping"
               resumeLabel="Resume Scraping"
               totalCount={campaign.total_contacts}
-              initialCompletedCount={campaign.scraped_count}
-              countField="scrapedCount"
+              completedCount={campaign.scraped_count}
               onProgress={fetchData}
             />
 
@@ -118,8 +117,7 @@ export default function CampaignPage() {
                 buttonLabel="Start Verification"
                 resumeLabel="Resume Verification"
                 totalCount={contactsWithAddresses}
-                initialCompletedCount={verifiedCount}
-                countField="processedCount"
+                completedCount={verifiedCount}
                 disabled={contactsWithAddresses === 0}
                 disabledMessage="Scrape addresses first before verifying."
                 onProgress={fetchData}
