@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { getColumnValue } from '@/lib/export-columns';
 import ExcelJS from 'exceljs';
 
 export async function GET(
@@ -27,37 +28,19 @@ export async function GET(
     .eq('status', 'complete')
     .order('created_at', { ascending: true });
 
-  // Fetch export settings (hard-coded columns)
+  // Fetch export settings in order
   const { data: settings } = await supabase
     .from('export_settings')
     .select('*')
     .order('column_order', { ascending: true });
 
+  const columns = settings || [];
+
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Addresses');
 
-  // Build header row: hard-coded columns + dynamic columns
-  const hardCodedColumns = (settings || []).map((s) => s.column_name);
-  const dynamicColumns = [
-    'CRM ID',
-    'First Name',
-    'Last Name',
-    'Company Name',
-    'Street Address',
-    'Street Address 2',
-    'City',
-    'State/Region',
-    'Postal Code',
-    'Country/Region',
-    'Address Source',
-    'Verified',
-    'Deliverable',
-  ];
-
-  const allColumns = [...hardCodedColumns, ...dynamicColumns];
-
-  // Add header row with styling
-  const headerRow = worksheet.addRow(allColumns);
+  // Header row from settings order
+  const headerRow = worksheet.addRow(columns.map((c) => c.column_name));
   headerRow.font = { bold: true };
   headerRow.eachCell((cell) => {
     cell.fill = {
@@ -68,27 +51,17 @@ export async function GET(
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   });
 
-  // Add data rows
+  // Data rows
   for (const contact of contacts || []) {
-    const address = contact.addresses?.[0];
-    const hardCodedValues = (settings || []).map((s) => s.default_value);
-    const dynamicValues = [
-      contact.crm_id,
-      contact.first_name,
-      contact.last_name,
-      contact.company_name,
-      address?.street_address || '',
-      address?.street_address_2 || '--',
-      address?.city || '',
-      address?.state_region || '',
-      address?.postal_code || '',
-      address?.country_region || '',
-      address?.source || '',
-      address?.is_verified ? 'Yes' : 'No',
-      address?.is_deliverable ? 'Yes' : 'No',
-    ];
-
-    worksheet.addRow([...hardCodedValues, ...dynamicValues]);
+    const address = contact.addresses?.[0] || null;
+    const values = columns.map((col) => {
+      if (col.column_type === 'dynamic' && col.column_key) {
+        return getColumnValue(col.column_key, contact, address);
+      }
+      // Custom column — use default value
+      return col.default_value || '';
+    });
+    worksheet.addRow(values);
   }
 
   // Auto-fit column widths
@@ -101,9 +74,7 @@ export async function GET(
     column.width = Math.min(maxLength + 2, 40);
   });
 
-  // Generate buffer
   const buffer = await workbook.xlsx.writeBuffer();
-
   const filename = `${campaign.name.replace(/[^a-zA-Z0-9]/g, '_')}_export.xlsx`;
 
   return new Response(buffer as ArrayBuffer, {

@@ -47,6 +47,8 @@ export interface ExportSetting {
   column_name: string;
   default_value: string;
   column_order: number;
+  column_type: 'dynamic' | 'custom';
+  column_key: string | null;
   created_at: string;
 }
 

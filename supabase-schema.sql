@@ -55,6 +55,8 @@ create table export_settings (
   column_name text not null,
   default_value text not null default '',
   column_order int not null default 0,
+  column_type text not null default 'custom' check (column_type in ('dynamic', 'custom')),
+  column_key text,
   created_at timestamptz not null default now()
 );
 
