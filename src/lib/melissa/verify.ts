@@ -76,19 +76,37 @@ export async function verifyAddress(
 
     const resultCodes = record.Results || '';
     const addressType = record.AddressType || '';
+    const subPremises = (record.SubPremises || '').trim();
 
     // Global Address API verification codes:
-    // AV21 = Address verified to country level
-    // AV22 = Address verified to state level
-    // AV23 = Address verified to city level
-    // AV24 = Address verified to street/building level
-    // AV25 = Address verified to sub-building/suite level
-    const isVerified = resultCodes.includes('AV24') || resultCodes.includes('AV25');
+    // AV24 = verified to street/building level (no suite)
+    // AV25 = verified to sub-building/suite level (has suite)
+    const hasAV25 = resultCodes.includes('AV25');
+    const hasAV24 = resultCodes.includes('AV24');
+
+    // Verified if:
+    // - Has suite info → must have AV25
+    // - No suite info → AV24 is sufficient
+    const isVerified = subPremises ? hasAV25 : (hasAV24 || hasAV25);
 
     // Deliverable = verified AND not a PO Box (P) or Residential (R)
     // S = Street/Commercial, H = HighRise/Commercial — both deliverable
-    // P = PO Box, R = Rural/Residential — not deliverable for this use case
+    // P = PO Box, R = Rural/Residential — not deliverable
     const isDeliverable = isVerified && addressType !== 'P' && addressType !== 'R';
+
+    // Parse the address correctly from Melissa's response:
+    // - AddressLine1 may contain "street + suite" combined (e.g. "18540 Apache Dr Unit 100")
+    // - SubPremises has just the suite part (e.g. "Unit 100")
+    // - We need to separate them for our street_address and street_address_2 fields
+    let parsedStreet = record.AddressLine1 || streetAddress;
+    let parsedStreet2: string | null = subPremises || null;
+
+    // If AddressLine1 contains the SubPremises, strip it out for a clean street address
+    if (subPremises && parsedStreet.includes(subPremises)) {
+      parsedStreet = parsedStreet.replace(subPremises, '').replace(/\s+/g, ' ').trim();
+      // Remove trailing comma if any
+      parsedStreet = parsedStreet.replace(/,\s*$/, '').trim();
+    }
 
     return {
       is_verified: isVerified,
@@ -97,8 +115,8 @@ export async function verifyAddress(
       result_codes: resultCodes,
       formatted_address: isVerified
         ? {
-            street_address: record.AddressLine1 || streetAddress,
-            street_address_2: record.AddressLine2 || streetAddress2,
+            street_address: parsedStreet,
+            street_address_2: parsedStreet2,
             city: record.Locality || city,
             state_region: record.AdministrativeArea || stateRegion,
             postal_code: record.PostalCode || postalCode,
