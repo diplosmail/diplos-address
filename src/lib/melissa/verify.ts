@@ -77,11 +77,17 @@ export async function verifyAddress(
     const resultCodes = record.Results || '';
     const addressType = record.AddressType || '';
 
-    // AS01 = Address fully verified to the street level
-    const isVerified = resultCodes.includes('AS01');
+    // Global Address API verification codes:
+    // AV21 = Address verified to country level
+    // AV22 = Address verified to state level
+    // AV23 = Address verified to city level
+    // AV24 = Address verified to street/building level
+    // AV25 = Address verified to sub-building/suite level
+    const isVerified = resultCodes.includes('AV24') || resultCodes.includes('AV25');
 
     // Deliverable = verified AND not a PO Box (P) or Residential (R)
-    // P = PO Box, R = Residential, S = Street/Commercial (deliverable)
+    // S = Street/Commercial, H = HighRise/Commercial — both deliverable
+    // P = PO Box, R = Rural/Residential — not deliverable for this use case
     const isDeliverable = isVerified && addressType !== 'P' && addressType !== 'R';
 
     return {
